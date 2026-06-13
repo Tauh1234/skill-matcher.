@@ -1,153 +1,126 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from matcher import match_skills
-import shutil
 import sqlite3
 import os
+from matcher import match_skills
 
 
 app = FastAPI()
 
 
-# ================= PATH =================
-
-BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
-)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-DATABASE_FOLDER = os.path.join(
+UPLOAD_DIR = os.path.join(
     BASE_DIR,
-    "database"
+    "uploads"
 )
+
 
 os.makedirs(
-    DATABASE_FOLDER,
+    UPLOAD_DIR,
     exist_ok=True
 )
 
 
 DB_PATH = os.path.join(
-    DATABASE_FOLDER,
+    BASE_DIR,
     "resumes.db"
 )
 
 
 
-# ================= HOME =================
+def create_db():
+
+    conn = sqlite3.connect(DB_PATH)
+
+    cursor = conn.cursor()
+
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS resumes(
+
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        name TEXT,
+
+        email TEXT,
+
+        skills TEXT,
+
+        resume_path TEXT
+
+    )
+    """)
+
+
+    conn.commit()
+    conn.close()
+
+
+
+create_db()
+
+
 
 @app.get("/")
 def home():
+
     return {
         "message": "Skill Matcher API Running"
     }
 
 
 
-# ================= MATCH =================
-
-@app.post("/match")
-def skill_match(data: dict):
-
-    result = match_skills(
-        data["user_skills"],
-        data["required_skills"]
-    )
-
-    return result
-
-
-
-
-# ================= UPLOAD RESUME =================
-
 @app.post("/upload-resume")
 async def upload_resume(
+
     name: str = Form(...),
+
     email: str = Form(...),
+
     skills: str = Form(...),
+
     resume: UploadFile = File(...)
+
 ):
-
-    # uploads folder
-
-    upload_dir = os.path.join(
-        BASE_DIR,
-        "uploads"
-    )
-
-
-    os.makedirs(
-        upload_dir,
-        exist_ok=True
-    )
 
 
     file_path = os.path.join(
-        upload_dir,
+        UPLOAD_DIR,
         resume.filename
     )
 
 
+    with open(file_path, "wb") as f:
 
-    # save pdf
-
-    with open(
-        file_path,
-        "wb"
-    ) as buffer:
-
-        shutil.copyfileobj(
-            resume.file,
-            buffer
+        f.write(
+            await resume.read()
         )
 
 
 
-    # database
-
-    conn = sqlite3.connect(
-        DB_PATH
-    )
+    conn = sqlite3.connect(DB_PATH)
 
     cursor = conn.cursor()
 
 
 
     cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS resumes
-        (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            email TEXT,
-            skills TEXT,
-            resume_file TEXT
-        )
-        """
-    )
 
-
-
-    cursor.execute(
         """
         INSERT INTO resumes
-        (
-            name,
-            email,
-            skills,
-            resume_file
-        )
+        (name,email,skills,resume_path)
 
-        VALUES (?,?,?,?)
+        VALUES(?,?,?,?)
         """,
+
         (
             name,
             email,
             skills,
             file_path
         )
+
     )
 
 
@@ -157,6 +130,33 @@ async def upload_resume(
 
 
     return {
+
         "message":
         "Resume uploaded successfully"
+
     }
+
+
+
+
+
+@app.post("/match")
+def match(data: dict):
+
+
+    user_skills = data["user_skills"]
+
+    required_skills = data["required_skills"]
+
+
+
+    result = match_skills(
+
+        user_skills,
+
+        required_skills
+
+    )
+
+
+    return result
