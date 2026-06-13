@@ -1,5 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Form
-from backend.matcher import match_skills
+from matcher import match_skills
 import shutil
 import sqlite3
 import os
